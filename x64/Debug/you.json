@@ -1,0 +1,22 @@
+{
+  "name": "you",
+  "initiative": 10,
+  "effects": [
+    {
+      "name": "Curse",
+      "duration": 1
+    },
+    {
+      "name": "Charmed",
+      "duration": 3
+    },
+    {
+      "name": "Frightened",
+      "duration": 1
+    },
+    {
+      "name": "Incapacitated",
+      "duration": 1
+    }
+  ]
+}

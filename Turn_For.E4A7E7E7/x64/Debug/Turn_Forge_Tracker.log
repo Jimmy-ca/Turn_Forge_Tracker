@@ -1,0 +1,9 @@
+﻿  main.c
+  models.c
+  ui.c
+  effects.c
+  dice.c
+  persistence.c
+  Generating Code...
+  LINK : C:\workspace\vec_myProjects\vsStudio\Turn_Forge_Tracker\x64\Debug\Turn_Forge_Tracker.exe not found or not built by the last incremental link; performing full link
+  Turn_Forge_Tracker.vcxproj -> C:\workspace\vec_myProjects\vsStudio\Turn_Forge_Tracker\x64\Debug\Turn_Forge_Tracker.exe

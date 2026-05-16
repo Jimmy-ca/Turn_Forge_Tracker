@@ -1,0 +1,14 @@
+{
+  "name": "name 1",
+  "initiative": 10,
+  "effects": [
+    {
+      "name": "Incapacitated",
+      "duration": 1
+    },
+    {
+      "name": "Invisible",
+      "duration": 1
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "New Creature2",
+  "initiative": 10,
+  "dexterity": 0.0,
+  "effects": [
+    {
+      "name": "Protection from Energy",
+      "duration": 2
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "next victim",
+  "initiative": 5,
+  "dexterity": 15.1,
+  "effects": [
+    {
+      "name": "Curse",
+      "duration": 1
+    },
+    {
+      "name": "Poisoned",
+      "duration": 1
+    },
+    {
+      "name": "Blinded",
+      "duration": 2
+    },
+    {
+      "name": "Protection from Energy",
+      "duration": 1
+    }
+  ]
+}

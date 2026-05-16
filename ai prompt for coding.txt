@@ -1,0 +1,155 @@
+workspace folder shall be C:\workspace\myProjects\vsStudio\Turn_Forge_Tracker\
+Create a Windows GUI desktop application in C only with WinForms 
+application shall functions as a Dungeons & Dragons Turn Forge Tracker. 
+The application should be simple, offline-only, and focused on usability for a Dungeon Master during combat.
+project is used for tracking turns in a game, managing player turns
+the project shall be a windows standalone GUI application
+
+Application name: Turn Forge Tracker
+
+
+CORE REQUIREMENTS:
+
+1. Initiative System:
+- Allow the user to add an unlimited number of entries (players, NPCs, creatures).
+- Each entry must include:
+  - Name (string)
+  - Initiative value (integer)
+  - Effect counts (integer)
+- Entries should be editable and allow adding new creatures during runtime.
+
+2. Sorting and Adding
+- Provide a button to sort all entries from highest to lowest initiative in the initiative list.
+  - Sorting should update the display immediately.
+- Provide a button to add a new name to the initiative list
+
+3. Turn Tracking:
+- Maintain a current "active" entry.
+- Visually highlight the active row.
+- Provide a "Next Turn" button:
+  - Moves to the next entry in the list
+  - Wraps to the first entry when reaching the end
+
+4. Round Tracking:
+- Display a round counter (starting at Round 1).
+- When the turn cycles from the last entry back to the first, increment the round counter.
+
+5. Effects System:
+- clicking a name in the initiative window shall display all applied effects, not the name in the Effects windows
+- To the right of the Effects label shall be 2 buttons Add and Remove
+  - Add
+    - Clicking Add opens a popup windows to add effects.
+    - Use a effects JSON file to read from and display list of effects and base duration
+  - Remove
+    - Clicking Remove
+	  - if no effect has been selected do nothing
+      - if an effect has been selected	display a Confirm yes/no windows
+	    - clicking Yes removes the effect
+		- clicking No does nothing and closes the Confirm window
+- Each effect contains:
+  - Effect Name (string)
+  - Remaining Duration (integer, in rounds)
+- A fixed panel on the right displays the selected creature’s effects.
+- Effects decrease by 1 at the start of each new round.
+- Effects are automatically removed when duration reaches 0.
+
+6. Notes Panel:
+- Provide a text box below the initiative list for freeform DM notes.
+- Notes should be editable and persisted with saved data.
+
+7. Dice Roller:
+- Roller Inputs shall display horizontally above the Rolls text box and below the Notes text box
+- Provide a text box below the Dice Roller Inputs for display Roll button results
+- Inputs: one horizontal row
+  - Die type
+    - Support dice types: d3, d4, d6, d8, d10, d12, d20, d100
+  - Number of dice to roll
+  - Modifier applied per die
+  - Roll button
+-Results: single textbox directly underneath
+  - Clicking the roll button shall display in the rolls results in the Rolls text box on one line
+  - Individual rolls
+  - Modified values
+  - Total sum
+
+8. Save / Load Encounters:
+- Allow saving all application state to a file (JSON preferred).
+- Allow loading saved encounters.
+- Stored data includes:
+  - Initiative list
+  - Current turn index
+  - Round number
+  - All effects
+  - Notes
+
+UI LAYOUT:
+- Force full-width panels
+  - Notes must span the entire width of the window
+  - Dice roller must be on a separate row below Notes and also span the entire width
+
+- Separate vertical hierarchy
+  - Top: Round counter and "Next Turn" button
+  - Left panel: Initiative list (Name, Initiative, highlighted active row)
+  - Right panel: Effects display for selected creature
+  - Middle Panel: Notes
+  - Bottom Panel: Dice Roller display, full width
+
+OTHER NOTES:
+- Keep UI simple and clean
+- Prioritize responsiveness and clarity during gameplay
+- Use appropriate data models (Creature, Effect)
+- Maintain state in memory with optional JSON serialization for save/load
+
+Optional enhancements (if time permits):
+- Color-coded rows for status
+- Drag-and-drop reordering
+- Keyboard shortcut for Next Turn (e.g., spacebar)
+- Dark mode
+
+Generate the full application structure, including:
+- Data models
+- UI layout
+- Event handling
+- Core logic for turn and round progression
+- Basic styling
+
+
+an ascii rendering of GUI layout
+
++--------------------------------------------------------------+
+|                     Turn Forge Tracker                       |
++--------------------------------------------------------------+
+| Round 1                                      [ Next Turn ]   |
++--------------------------------------------------------------+
+
++---------------------------+----------------------------------+
+| Initiative                | Effects        [Add] [Remove]    |
+|---------------------------|----------------------------------|
+| Name | Initiative | Eff   | Zephyra                          |
+|---------------------------|----------------------------------|
+| Avery   | 15  | 1         | Effect       | Duration          |
+| Goblin  | 12  | 3         |--------------|-------------------|
+| Zephyra |  7  | 2  <--    | Poisoned     | 2                 |
+|                           | Bless        | 3                 |
+|---------------------------|----------------------------------|
+| [ Sort ]   [ Add ]        |                                  |
++---------------------------+----------------------------------+
+
++--------------------------------------------------------------+
+| Notes                                                        |
+|--------------------------------------------------------------|
+|                                                              |
+|  (Full-width editable text area for DM notes)                |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+
++--------------------------------------------------------------+
+| Dice Roller                                                  |
+|--------------------------------------------------------------|
+| Die: [d20 ▼]   # Rolls: [ 2 ]   Modifier: [ +1 ]   [ Roll ]  |
+|--------------------------------------------------------------|
+| [ 17 (+1)  Total: 18 ]                                       |
+| [ 11 (+1)  Total: 12 ]                                       |
++--------------------------------------------------------------+
+

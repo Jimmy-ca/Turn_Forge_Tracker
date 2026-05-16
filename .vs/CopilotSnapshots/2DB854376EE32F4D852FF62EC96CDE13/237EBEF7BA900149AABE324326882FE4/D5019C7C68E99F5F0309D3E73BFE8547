@@ -1,0 +1,127 @@
+﻿#include "models.h"
+#include <stdlib.h>
+#include <string.h>
+
+Encounter* encounter_create(void) {
+	Encounter* enc = (Encounter*)malloc(sizeof(Encounter));
+	if (!enc) return NULL;
+
+	enc->creature_count = 0;
+	enc->current_turn_index = 0;
+	enc->round_number = 1;
+	memset(enc->notes, 0, sizeof(enc->notes));
+
+	return enc;
+}
+
+void encounter_destroy(Encounter* encounter) {
+	if (encounter) {
+		free(encounter);
+	}
+}
+
+void creature_init(Creature* creature, const char* name, int initiative) {
+	if (!creature) return;
+
+	strncpy_s(creature->name, MAX_NAME_LENGTH, name, MAX_NAME_LENGTH - 1);
+	creature->name[MAX_NAME_LENGTH - 1] = '\0';
+	creature->initiative = initiative;
+	creature->effect_count = 0;
+}
+
+int encounter_add_creature(Encounter* encounter, const char* name, int initiative) {
+	if (!encounter || encounter->creature_count >= MAX_CREATURES) {
+		return -1;
+	}
+
+	creature_init(&encounter->creatures[encounter->creature_count], name, initiative);
+	return encounter->creature_count++;
+}
+
+int encounter_remove_creature(Encounter* encounter, int index) {
+	if (!encounter || index < 0 || index >= encounter->creature_count) {
+		return -1;
+	}
+
+	for (int i = index; i < encounter->creature_count - 1; i++) {
+		encounter->creatures[i] = encounter->creatures[i + 1];
+	}
+	encounter->creature_count--;
+
+	if (encounter->current_turn_index >= encounter->creature_count && encounter->creature_count > 0) {
+		encounter->current_turn_index = 0;
+	}
+
+	return 0;
+}
+
+static int compare_creatures(const void* a, const void* b) {
+	const Creature* ca = (const Creature*)a;
+	const Creature* cb = (const Creature*)b;
+	return cb->initiative - ca->initiative;
+}
+
+void encounter_sort_by_initiative(Encounter* encounter) {
+	if (!encounter || encounter->creature_count <= 1) {
+		return;
+	}
+
+	qsort(encounter->creatures, encounter->creature_count, sizeof(Creature), compare_creatures);
+	encounter->current_turn_index = 0;
+}
+
+void creature_add_effect(Creature* creature, const char* effect_name, int duration) {
+	if (!creature || creature->effect_count >= MAX_EFFECTS) {
+		return;
+	}
+
+	strncpy_s(creature->effects[creature->effect_count].name, MAX_NAME_LENGTH, 
+			  effect_name, MAX_NAME_LENGTH - 1);
+	creature->effects[creature->effect_count].name[MAX_NAME_LENGTH - 1] = '\0';
+	creature->effects[creature->effect_count].duration = duration;
+	creature->effect_count++;
+}
+
+void creature_remove_effect(Creature* creature, int effect_index) {
+	if (!creature || effect_index < 0 || effect_index >= creature->effect_count) {
+		return;
+	}
+
+	for (int i = effect_index; i < creature->effect_count - 1; i++) {
+		creature->effects[i] = creature->effects[i + 1];
+	}
+	creature->effect_count--;
+}
+
+void creature_decrement_effects(Creature* creature) {
+	if (!creature) return;
+
+	for (int i = creature->effect_count - 1; i >= 0; i--) {
+		creature->effects[i].duration--;
+		if (creature->effects[i].duration <= 0) {
+			creature_remove_effect(creature, i);
+		}
+	}
+}
+
+void encounter_next_turn(Encounter* encounter) {
+	if (!encounter || encounter->creature_count == 0) {
+		return;
+	}
+
+	int prev_index = encounter->current_turn_index;
+	encounter->current_turn_index = (encounter->current_turn_index + 1) % encounter->creature_count;
+
+	if (encounter->current_turn_index < prev_index) {
+		encounter_decrement_all_effects(encounter);
+		encounter->round_number++;
+	}
+}
+
+void encounter_decrement_all_effects(Encounter* encounter) {
+	if (!encounter) return;
+
+	for (int i = 0; i < encounter->creature_count; i++) {
+		creature_decrement_effects(&encounter->creatures[i]);
+	}
+}

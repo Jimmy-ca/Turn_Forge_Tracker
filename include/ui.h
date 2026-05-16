@@ -1,0 +1,34 @@
+#ifndef UI_H
+#define UI_H
+
+#include <windows.h>
+#include "models.h"
+#include "effects.h"
+
+typedef struct {
+	HWND hwnd_main;
+	HWND hwnd_initiative_list;
+	HWND hwnd_effects_list;
+	HWND hwnd_notes;
+	HWND hwnd_dice_type;
+	HWND hwnd_dice_count;
+	HWND hwnd_modifier;
+	HWND hwnd_final_modifier;
+	HWND hwnd_roll_button;
+	HWND hwnd_roll_results;
+	HWND hwnd_round_label;
+	HWND hwnd_next_turn_button;
+	HWND hwnd_sort_button;
+	HWND hwnd_add_creature_button;
+	HWND hwnd_add_effect_button;
+	HWND hwnd_remove_effect_button;
+
+	Encounter* encounter;
+	EffectsDatabase* effects_db;
+	int selected_creature_idx;
+} AppState;
+
+int ui_init_and_run(void);
+AppState* ui_get_state(void);
+
+#endif

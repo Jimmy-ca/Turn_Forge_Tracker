@@ -1,0 +1,15 @@
+{
+  "name": "short name",
+  "initiative": 10,
+  "dexterity": 0.0,
+  "effects": [
+    {
+      "name": "Invisible",
+      "duration": 1
+    },
+    {
+      "name": "Mage Armor",
+      "duration": 8
+    }
+  ]
+}

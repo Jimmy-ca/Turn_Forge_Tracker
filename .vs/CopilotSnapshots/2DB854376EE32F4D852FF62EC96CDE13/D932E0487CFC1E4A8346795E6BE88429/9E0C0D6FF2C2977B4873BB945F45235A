@@ -1,0 +1,662 @@
+﻿#include "ui.h"
+#include "persistence.h"
+#include "dice.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <windowsx.h>
+
+/* Dark Mode Colors */
+#define DARK_BG_COLOR       RGB(30, 30, 30)      /* Very dark gray background */
+#define DARK_FG_COLOR       RGB(220, 220, 220)   /* Light gray text */
+#define DARK_BUTTON_COLOR   RGB(45, 45, 48)      /* Slightly lighter button */
+#define DARK_BORDER_COLOR   RGB(60, 60, 60)      /* Dark border */
+#define DARK_ACTIVE_COLOR   RGB(0, 122, 204)     /* Blue for active/selected */
+
+static HBRUSH g_brush_bg = NULL;
+static HBRUSH g_brush_button = NULL;
+static HBRUSH g_brush_active = NULL;
+static HFONT g_font = NULL;
+
+static AppState g_app_state = { 0 };
+
+typedef struct {
+	char name[MAX_NAME_LENGTH];
+	int initiative;
+	int edit_mode;
+	int creature_idx;
+} CreatureDialogData;
+
+LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+AppState* ui_get_state(void) {
+	return &g_app_state;
+}
+
+static void ui_draw_rounded_button(const DRAWITEMSTRUCT* dis) {
+	if (!dis) return;
+
+	RECT rc = dis->rcItem;
+	HDC hdc = dis->hDC;
+	BOOL pressed = (dis->itemState & ODS_SELECTED) != 0;
+	BOOL focused = (dis->itemState & ODS_FOCUS) != 0;
+	BOOL disabled = (dis->itemState & ODS_DISABLED) != 0;
+
+	COLORREF fill_color = disabled ? RGB(50, 50, 50) : (pressed ? DARK_ACTIVE_COLOR : DARK_BUTTON_COLOR);
+	COLORREF border_color = RGB(255, 64, 64);
+	COLORREF text_color = disabled ? RGB(130, 130, 130) : DARK_FG_COLOR;
+	int arc_size = rc.bottom - rc.top;
+
+	FillRect(hdc, &rc, g_brush_bg ? g_brush_bg : (HBRUSH)(COLOR_BTNFACE + 1));
+
+	HPEN pen = CreatePen(PS_SOLID, 1, border_color);
+	HBRUSH brush = CreateSolidBrush(fill_color);
+	HGDIOBJ old_pen = SelectObject(hdc, pen);
+	HGDIOBJ old_brush = SelectObject(hdc, brush);
+	int old_bk_mode = SetBkMode(hdc, TRANSPARENT);
+	COLORREF old_text_color = SetTextColor(hdc, text_color);
+
+	RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, arc_size, arc_size);
+
+	char text[128] = "";
+	GetWindowText(dis->hwndItem, text, sizeof(text));
+	RECT text_rect = rc;
+	if (pressed) {
+		OffsetRect(&text_rect, 1, 1);
+	}
+	DrawText(hdc, text, -1, &text_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+	if (focused && !disabled) {
+		RECT focus_rect = rc;
+		InflateRect(&focus_rect, -4, -4);
+		DrawFocusRect(hdc, &focus_rect);
+	}
+
+	SetTextColor(hdc, old_text_color);
+	SetBkMode(hdc, old_bk_mode);
+	SelectObject(hdc, old_brush);
+	SelectObject(hdc, old_pen);
+	DeleteObject(brush);
+	DeleteObject(pen);
+}
+
+void ui_update_initiative_list(void) {
+	AppState* app = &g_app_state;
+	if (!app->hwnd_initiative_list || !app->encounter) return;
+
+	SendMessage(app->hwnd_initiative_list, LB_RESETCONTENT, 0, 0);
+
+	for (int i = 0; i < app->encounter->creature_count; i++) {
+		Creature* c = &app->encounter->creatures[i];
+		char buffer[512];
+		sprintf_s(buffer, sizeof(buffer), "%s (Init: %d, Effects: %d)%s",
+				  c->name, c->initiative, c->effect_count,
+				  (i == app->encounter->current_turn_index) ? " <- ACTIVE" : "");
+		SendMessage(app->hwnd_initiative_list, LB_ADDSTRING, 0, (LPARAM)buffer);
+	}
+}
+
+void ui_update_effects_list(void) {
+	AppState* app = &g_app_state;
+	if (!app->hwnd_effects_list || !app->encounter) return;
+
+	SendMessage(app->hwnd_effects_list, LB_RESETCONTENT, 0, 0);
+
+	if (app->selected_creature_idx >= 0 && 
+		app->selected_creature_idx < app->encounter->creature_count) {
+		Creature* c = &app->encounter->creatures[app->selected_creature_idx];
+
+		for (int i = 0; i < c->effect_count; i++) {
+			char buffer[512];
+			sprintf_s(buffer, sizeof(buffer), "%s (%d rounds)", 
+					  c->effects[i].name, c->effects[i].duration);
+			SendMessage(app->hwnd_effects_list, LB_ADDSTRING, 0, (LPARAM)buffer);
+		}
+	}
+}
+
+void ui_update_round_label(void) {
+	AppState* app = &g_app_state;
+	if (!app->hwnd_round_label || !app->encounter) return;
+
+	char buffer[256];
+	sprintf_s(buffer, sizeof(buffer), "Round %d", app->encounter->round_number);
+	SetWindowText(app->hwnd_round_label, buffer);
+}
+
+void ui_init_dark_mode(void) {
+	if (g_brush_bg) return;
+
+	g_brush_bg = CreateSolidBrush(DARK_BG_COLOR);
+	g_brush_button = CreateSolidBrush(DARK_BUTTON_COLOR);
+	g_brush_active = CreateSolidBrush(DARK_ACTIVE_COLOR);
+
+	LOGFONT lf;
+	ZeroMemory(&lf, sizeof(LOGFONT));
+	lf.lfHeight = -11;
+	lf.lfWeight = FW_NORMAL;
+	strcpy_s(lf.lfFaceName, LF_FACESIZE, "Segoe UI");
+	g_font = CreateFontIndirect(&lf);
+}
+
+void ui_cleanup_dark_mode(void) {
+	if (g_brush_bg) { DeleteObject(g_brush_bg); g_brush_bg = NULL; }
+	if (g_brush_button) { DeleteObject(g_brush_button); g_brush_button = NULL; }
+	if (g_brush_active) { DeleteObject(g_brush_active); g_brush_active = NULL; }
+	if (g_font) { DeleteObject(g_font); g_font = NULL; }
+}
+
+void ui_create_controls(HWND hwnd_parent) {
+	AppState* app = &g_app_state;
+
+	int top = 10;
+
+	app->hwnd_round_label = CreateWindow("STATIC", "Round 1",
+		WS_CHILD | WS_VISIBLE, 10, top, 200, 20, hwnd_parent, NULL, NULL, NULL);
+
+	app->hwnd_next_turn_button = CreateWindow("BUTTON", "Next Turn",
+		WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 550, top, 100, 20, 
+		hwnd_parent, (HMENU)1001, NULL, NULL);
+
+	top += 40;
+
+	CreateWindow("STATIC", "Initiative",
+		WS_CHILD | WS_VISIBLE, 10, top, 300, 20, hwnd_parent, NULL, NULL, NULL);
+
+	CreateWindow("STATIC", "Effects",
+		WS_CHILD | WS_VISIBLE, 350, top, 300, 20, hwnd_parent, NULL, NULL, NULL);
+
+	top += 30;
+
+	app->hwnd_initiative_list = CreateWindow("LISTBOX", "",
+		WS_CHILD | WS_VISIBLE | WS_BORDER | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT,
+		10, top, 320, 200, hwnd_parent, (HMENU)2001, NULL, NULL);
+
+	app->hwnd_effects_list = CreateWindow("LISTBOX", "",
+		WS_CHILD | WS_VISIBLE | WS_BORDER | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT,
+		350, top, 320, 200, hwnd_parent, (HMENU)2002, NULL, NULL);
+
+	top += 220;
+
+	app->hwnd_sort_button = CreateWindow("BUTTON", "Sort",
+		WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 10, top, 80, 25, 
+		hwnd_parent, (HMENU)1002, NULL, NULL);
+
+	app->hwnd_add_creature_button = CreateWindow("BUTTON", "Add",
+		WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 100, top, 80, 25, 
+		hwnd_parent, (HMENU)1003, NULL, NULL);
+
+	app->hwnd_add_effect_button = CreateWindow("BUTTON", "Add",
+		WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 350, top, 50, 25, 
+		hwnd_parent, (HMENU)1004, NULL, NULL);
+
+	app->hwnd_remove_effect_button = CreateWindow("BUTTON", "Remove",
+		WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 410, top, 50, 25, 
+		hwnd_parent, (HMENU)1005, NULL, NULL);
+
+	top += 40;
+
+	CreateWindow("STATIC", "Notes",
+		WS_CHILD | WS_VISIBLE, 10, top, 660, 20, hwnd_parent, NULL, NULL, NULL);
+
+	top += 25;
+
+	app->hwnd_notes = CreateWindow("EDIT", "",
+		WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_WANTRETURN | WS_VSCROLL,
+		10, top, 660, 100, hwnd_parent, (HMENU)3001, NULL, NULL);
+
+	top += 110;
+
+	CreateWindow("STATIC", "Dice Roller",
+		WS_CHILD | WS_VISIBLE, 10, top, 660, 20, hwnd_parent, NULL, NULL, NULL);
+
+	top += 25;
+
+	CreateWindow("STATIC", "Die:",
+		WS_CHILD | WS_VISIBLE, 10, top, 40, 20, hwnd_parent, NULL, NULL, NULL);
+
+	app->hwnd_dice_type = CreateWindow("COMBOBOX", "d20",
+		WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST, 55, top, 80, 200,
+		hwnd_parent, (HMENU)4001, NULL, NULL);
+
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d3");
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d4");
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d6");
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d8");
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d10");
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d12");
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d20");
+	SendMessage(app->hwnd_dice_type, CB_ADDSTRING, 0, (LPARAM)"d100");
+	SendMessage(app->hwnd_dice_type, CB_SETCURSEL, 6, 0);
+
+	CreateWindow("STATIC", "# Dice:",
+		WS_CHILD | WS_VISIBLE, 145, top, 60, 20, hwnd_parent, NULL, NULL, NULL);
+
+	app->hwnd_dice_count = CreateWindow("EDIT", "1",
+		WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER, 210, top, 50, 20,
+		hwnd_parent, (HMENU)4002, NULL, NULL);
+
+	CreateWindow("STATIC", "Modifier:",
+		WS_CHILD | WS_VISIBLE, 270, top, 70, 20, hwnd_parent, NULL, NULL, NULL);
+
+	app->hwnd_modifier = CreateWindow("EDIT", "0",
+		WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER, 345, top, 50, 20,
+		hwnd_parent, (HMENU)4003, NULL, NULL);
+
+	app->hwnd_roll_button = CreateWindow("BUTTON", "Roll",
+		WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 410, top, 70, 20, 
+		hwnd_parent, (HMENU)1006, NULL, NULL);
+
+	top += 30;
+
+	app->hwnd_roll_results = CreateWindow("EDIT", "",
+		WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
+		10, top, 660, 80, hwnd_parent, (HMENU)3002, NULL, NULL);
+}
+
+
+typedef struct {
+	CreatureDialogData* data;
+	int result;
+	BOOL done;
+	HWND hwnd_name;
+	HWND hwnd_init;
+	HWND hwnd_ok;
+	HWND hwnd_cancel;
+} DialogState;
+
+LRESULT CALLBACK DialogWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	DialogState* state = (DialogState*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
+	switch (msg) {
+		case WM_CREATE: {
+			CREATESTRUCT* cs = (CREATESTRUCT*)lParam;
+			state = (DialogState*)cs->lpCreateParams;
+			SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)state);
+
+			HWND hwnd_label_name = CreateWindow("STATIC", "Name:",
+				WS_CHILD | WS_VISIBLE, 10, 10, 50, 20, hwnd, NULL, NULL, NULL);
+
+			state->hwnd_name = CreateWindow("EDIT", "",
+				WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP, 70, 10, 210, 20,
+				hwnd, (HMENU)1001, NULL, NULL);
+
+			HWND hwnd_label_init = CreateWindow("STATIC", "Initiative:",
+				WS_CHILD | WS_VISIBLE, 10, 40, 60, 20, hwnd, NULL, NULL, NULL);
+
+			state->hwnd_init = CreateWindow("EDIT", "10",
+				WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER | WS_TABSTOP, 70, 40, 210, 20,
+				hwnd, (HMENU)1002, NULL, NULL);
+
+			state->hwnd_ok = CreateWindow("BUTTON", "OK",
+				WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_TABSTOP, 80, 80, 70, 25,
+				hwnd, (HMENU)IDOK, NULL, NULL);
+
+			state->hwnd_cancel = CreateWindow("BUTTON", "Cancel",
+				WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_TABSTOP, 160, 80, 70, 25,
+				hwnd, (HMENU)IDCANCEL, NULL, NULL);
+
+			SetWindowText(state->hwnd_name, state->data->name);
+			char init_str[16];
+			sprintf_s(init_str, sizeof(init_str), "%d", state->data->initiative);
+			SetWindowText(state->hwnd_init, init_str);
+
+			SetFocus(state->hwnd_name);
+			SendMessage(state->hwnd_name, EM_SETSEL, 0, -1);
+			return 0;
+		}
+
+		case WM_KEYDOWN: {
+			if (wParam == VK_TAB) {
+				HWND hwnd_focus = GetFocus();
+				HWND hwnd_next = NULL;
+
+				if (hwnd_focus == state->hwnd_name) {
+					hwnd_next = state->hwnd_init;
+				} else if (hwnd_focus == state->hwnd_init) {
+					hwnd_next = state->hwnd_ok;
+				} else if (hwnd_focus == state->hwnd_ok) {
+					hwnd_next = state->hwnd_cancel;
+				} else if (hwnd_focus == state->hwnd_cancel) {
+					hwnd_next = state->hwnd_name;
+				}
+
+				if (hwnd_next) {
+					SetFocus(hwnd_next);
+					if (hwnd_next == state->hwnd_name || hwnd_next == state->hwnd_init) {
+						SendMessage(hwnd_next, EM_SETSEL, 0, -1);
+					}
+				}
+				return 0;
+			}
+			break;
+		}
+
+		case WM_COMMAND: {
+			int control_id = LOWORD(wParam);
+
+			if (control_id == IDOK) {
+				char name_buf[MAX_NAME_LENGTH];
+				GetWindowText(state->hwnd_name, name_buf, MAX_NAME_LENGTH);
+
+				char init_buf[16];
+				GetWindowText(state->hwnd_init, init_buf, sizeof(init_buf));
+
+				if (strlen(name_buf) > 0) {
+					strcpy_s(state->data->name, MAX_NAME_LENGTH, name_buf);
+					state->data->initiative = atoi(init_buf);
+					state->result = IDOK;
+					state->done = TRUE;
+					PostMessage(hwnd, WM_CLOSE, 0, 0);
+				} else {
+					MessageBox(hwnd, "Please enter a creature name", "Invalid Input", MB_ICONWARNING);
+					SetFocus(state->hwnd_name);
+				}
+				return 0;
+			}
+			else if (control_id == IDCANCEL) {
+				state->result = IDCANCEL;
+				state->done = TRUE;
+				PostMessage(hwnd, WM_CLOSE, 0, 0);
+				return 0;
+			}
+			break;
+		}
+
+		case WM_CLOSE:
+			DestroyWindow(hwnd);
+			return 0;
+
+		case WM_CTLCOLORDLG:
+		case WM_CTLCOLORLISTBOX:
+		case WM_CTLCOLOREDIT:
+		case WM_CTLCOLORSTATIC: {
+			HDC hdc = (HDC)wParam;
+			SetBkColor(hdc, DARK_BG_COLOR);
+			SetTextColor(hdc, DARK_FG_COLOR);
+			return (LRESULT)g_brush_bg;
+		}
+
+		case WM_CTLCOLORBTN: {
+			HDC hdc = (HDC)wParam;
+			SetBkColor(hdc, DARK_BUTTON_COLOR);
+			SetTextColor(hdc, DARK_FG_COLOR);
+			return (LRESULT)g_brush_button;
+		}
+
+		case WM_DRAWITEM: {
+			const DRAWITEMSTRUCT* dis = (const DRAWITEMSTRUCT*)lParam;
+			if (dis && dis->CtlType == ODT_BUTTON) {
+				ui_draw_rounded_button(dis);
+				return TRUE;
+			}
+			break;
+		}
+	}
+
+	return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+int show_creature_dialog(HWND parent, CreatureDialogData* data) {
+	static BOOL class_registered = FALSE;
+
+	if (!class_registered) {
+		WNDCLASS wc = { 0 };
+		wc.lpfnWndProc = DialogWindowProc;
+		wc.lpszClassName = "CreatureDialogClass";
+		wc.hInstance = GetModuleHandle(NULL);
+		wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+		wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+		wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+		RegisterClass(&wc);
+		class_registered = TRUE;
+	}
+
+	DialogState state;
+	state.data = data;
+	state.result = IDCANCEL;
+	state.done = FALSE;
+
+	HWND hwnd_dialog = CreateWindowEx(WS_EX_DLGMODALFRAME,
+		"CreatureDialogClass", "Add name",
+		WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+		300, 200, 300, 150,
+		parent, NULL, GetModuleHandle(NULL), &state);
+
+	if (!hwnd_dialog) return IDCANCEL;
+
+	ShowWindow(hwnd_dialog, SW_SHOW);
+	UpdateWindow(hwnd_dialog);
+
+	MSG msg;
+	while (GetMessage(&msg, NULL, 0, 0)) {
+		if (msg.hwnd == hwnd_dialog || IsChild(hwnd_dialog, msg.hwnd)) {
+			if (!IsDialogMessage(hwnd_dialog, &msg)) {
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+		} else {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+
+		if (state.done) {
+			break;
+		}
+	}
+
+	return state.result;
+}
+
+LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	AppState* app = &g_app_state;
+
+	switch (msg) {
+		case WM_CREATE:
+			ui_create_controls(hwnd);
+			break;
+
+		case WM_COMMAND: {
+			int control_id = LOWORD(wParam);
+			int notification = HIWORD(wParam);
+
+			if (control_id == 1001) {
+				if (app->encounter) {
+					encounter_next_turn(app->encounter);
+					ui_update_initiative_list();
+					ui_update_round_label();
+				}
+			}
+			else if (control_id == 1002) {
+				if (app->encounter) {
+					encounter_sort_by_initiative(app->encounter);
+					ui_update_initiative_list();
+				}
+			}
+			else if (control_id == 1003) {
+				if (app->encounter) {
+					CreatureDialogData dialog_data;
+					strcpy_s(dialog_data.name, MAX_NAME_LENGTH, "New Creature");
+					dialog_data.initiative = 10;
+					dialog_data.edit_mode = 0;
+					dialog_data.creature_idx = -1;
+
+					if (show_creature_dialog(hwnd, &dialog_data) == IDOK) {
+						encounter_add_creature(app->encounter, dialog_data.name, dialog_data.initiative);
+						ui_update_initiative_list();
+					}
+				}
+			}
+			else if (control_id == 1004) {
+				if (app->encounter && app->selected_creature_idx >= 0 && 
+					app->selected_creature_idx < app->encounter->creature_count) {
+					Creature* c = &app->encounter->creatures[app->selected_creature_idx];
+					if (app->effects_db && app->effects_db->count > 0) {
+						const EffectDefinition* effect = effects_db_get_effect(app->effects_db, 0);
+						if (effect) {
+							creature_add_effect(c, effect->name, effect->base_duration);
+							ui_update_effects_list();
+							ui_update_initiative_list();
+						}
+					}
+				}
+			}
+			else if (control_id == 1005) {
+				if (app->encounter && app->selected_creature_idx >= 0 && 
+					app->selected_creature_idx < app->encounter->creature_count) {
+					int sel = (int)SendMessage(app->hwnd_effects_list, LB_GETCURSEL, 0, 0);
+					if (sel != LB_ERR) {
+						Creature* c = &app->encounter->creatures[app->selected_creature_idx];
+						creature_remove_effect(c, sel);
+						ui_update_effects_list();
+						ui_update_initiative_list();
+					}
+				}
+			}
+			else if (control_id == 1006) {
+				char dice_type_str[16];
+				GetWindowText(app->hwnd_dice_type, dice_type_str, sizeof(dice_type_str));
+
+				char count_str[16];
+				GetWindowText(app->hwnd_dice_count, count_str, sizeof(count_str));
+				int count = atoi(count_str);
+
+				char mod_str[16];
+				GetWindowText(app->hwnd_modifier, mod_str, sizeof(mod_str));
+				int modifier = atoi(mod_str);
+
+				DiceType type = dice_type_from_string(dice_type_str);
+				RollResult* result = roll_dice(type, count, modifier);
+
+				if (result) {
+					char results_text[4096] = "";
+					for (int i = 0; i < result->count; i++) {
+						char line[256];
+						sprintf_s(line, sizeof(line), "[ %d (+%d) = %d ]\r\n",
+								  result->individual_rolls[i], result->modifier, result->modified_rolls[i]);
+						strcat_s(results_text, sizeof(results_text), line);
+					}
+
+					char total_line[256];
+					sprintf_s(total_line, sizeof(total_line), "\r\nTotal: %d", result->total);
+					strcat_s(results_text, sizeof(results_text), total_line);
+
+								SetWindowText(app->hwnd_roll_results, results_text);
+								roll_result_destroy(result);
+							}
+						}
+						else if (notification == LBN_SELCHANGE && control_id == 2001) {
+							int sel = (int)SendMessage(app->hwnd_initiative_list, LB_GETCURSEL, 0, 0);
+							if (sel != LB_ERR) {
+								app->selected_creature_idx = sel;
+								ui_update_effects_list();
+							}
+						}
+						else if (notification == LBN_DBLCLK && control_id == 2001) {
+							int sel = (int)SendMessage(app->hwnd_initiative_list, LB_GETCURSEL, 0, 0);
+							if (sel != LB_ERR && app->encounter && sel < app->encounter->creature_count) {
+								Creature* c = &app->encounter->creatures[sel];
+								CreatureDialogData dialog_data;
+								strcpy_s(dialog_data.name, MAX_NAME_LENGTH, c->name);
+								dialog_data.initiative = c->initiative;
+								dialog_data.edit_mode = 1;
+								dialog_data.creature_idx = sel;
+
+								if (show_creature_dialog(hwnd, &dialog_data) == IDOK) {
+									strcpy_s(c->name, MAX_NAME_LENGTH, dialog_data.name);
+									c->initiative = dialog_data.initiative;
+									ui_update_initiative_list();
+								}
+							}
+						}
+						break;
+					}
+
+									case WM_DESTROY:
+							PostQuitMessage(0);
+							break;
+
+						case WM_CTLCOLORDLG:
+						case WM_CTLCOLORLISTBOX:
+						case WM_CTLCOLOREDIT:
+						case WM_CTLCOLORSTATIC: {
+							HDC hdc = (HDC)wParam;
+							SetBkColor(hdc, DARK_BG_COLOR);
+							SetTextColor(hdc, DARK_FG_COLOR);
+							return (LRESULT)g_brush_bg;
+						}
+
+						case WM_CTLCOLORBTN: {
+							HDC hdc = (HDC)wParam;
+							SetBkColor(hdc, DARK_BUTTON_COLOR);
+							SetTextColor(hdc, DARK_FG_COLOR);
+							return (LRESULT)g_brush_button;
+						}
+
+						case WM_DRAWITEM: {
+							const DRAWITEMSTRUCT* dis = (const DRAWITEMSTRUCT*)lParam;
+							if (dis && dis->CtlType == ODT_BUTTON) {
+								ui_draw_rounded_button(dis);
+								return TRUE;
+							}
+							break;
+						}
+
+						default:
+							return DefWindowProc(hwnd, msg, wParam, lParam);
+						}
+						return 0;
+					}
+
+int ui_init_and_run(void) {
+	AppState* app = &g_app_state;
+
+	app->encounter = encounter_create();
+	if (!app->encounter) return -1;
+
+	app->effects_db = effects_db_create();
+	if (!app->effects_db) {
+		encounter_destroy(app->encounter);
+		return -1;
+	}
+
+	effects_db_load_from_json(app->effects_db, "resources\\effects.json");
+
+	app->selected_creature_idx = -1;
+
+	ui_init_dark_mode();
+
+	WNDCLASS wc = { 0 };
+	wc.lpfnWndProc = MainWindowProc;
+	wc.lpszClassName = "TurnForgeTrackerClass";
+	wc.hInstance = GetModuleHandle(NULL);
+	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wc.hbrBackground = g_brush_bg;
+
+	if (!RegisterClass(&wc)) {
+		return -1;
+	}
+
+	app->hwnd_main = CreateWindow("TurnForgeTrackerClass", "Turn Forge Tracker",
+		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 700, 700,
+		NULL, NULL, wc.hInstance, NULL);
+
+	if (!app->hwnd_main) {
+		return -1;
+	}
+
+	ShowWindow(app->hwnd_main, SW_SHOW);
+	UpdateWindow(app->hwnd_main);
+
+	MSG msg;
+	while (GetMessage(&msg, NULL, 0, 0)) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+
+	if (app->encounter) encounter_destroy(app->encounter);
+	if (app->effects_db) effects_db_destroy(app->effects_db);
+	ui_cleanup_dark_mode();
+
+	return 0;
+}

@@ -1,0 +1,19 @@
+{
+  "name": "her name",
+  "initiative": 10,
+  "dexterity": 0.0,
+  "effects": [
+    {
+      "name": "Armor of Agathys",
+      "duration": 1
+    },
+    {
+      "name": "Protection from Energy",
+      "duration": 1
+    },
+    {
+      "name": "Hex",
+      "duration": 1
+    }
+  ]
+}

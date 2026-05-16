@@ -1,0 +1,45 @@
+﻿#ifndef MODELS_H
+#define MODELS_H
+
+#include <time.h>
+
+#define MAX_NAME_LENGTH 256
+#define MAX_EFFECTS 50
+#define MAX_CREATURES 100
+
+typedef struct {
+	char name[MAX_NAME_LENGTH];
+	int duration;
+} Effect;
+
+typedef struct {
+	char name[MAX_NAME_LENGTH];
+	int initiative;
+	Effect effects[MAX_EFFECTS];
+	int effect_count;
+} Creature;
+
+typedef struct {
+	Creature creatures[MAX_CREATURES];
+	int creature_count;
+	int current_turn_index;
+	int round_number;
+	char notes[4096];
+} Encounter;
+
+Encounter* encounter_create(void);
+void encounter_destroy(Encounter* encounter);
+
+void creature_init(Creature* creature, const char* name, int initiative);
+int encounter_add_creature(Encounter* encounter, const char* name, int initiative);
+int encounter_remove_creature(Encounter* encounter, int index);
+void encounter_sort_by_initiative(Encounter* encounter);
+
+void creature_add_effect(Creature* creature, const char* effect_name, int duration);
+void creature_remove_effect(Creature* creature, int effect_index);
+void creature_decrement_effects(Creature* creature);
+
+void encounter_next_turn(Encounter* encounter);
+void encounter_decrement_all_effects(Encounter* encounter);
+
+#endif

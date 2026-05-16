@@ -1,0 +1,178 @@
+﻿#include "persistence.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+
+static void sanitize_filename(const char* input, char* output, size_t output_size) {
+	if (!input || !output || output_size == 0) return;
+
+	size_t j = 0;
+	for (size_t i = 0; input[i] != '\0' && j < output_size - 1; i++) {
+		unsigned char c = (unsigned char)input[i];
+		if (isalnum(c) || c == '_' || c == '-') {
+			output[j++] = (char)c;
+		}
+		else if (c == ' ') {
+			output[j++] = '_';
+		}
+	}
+
+	if (j == 0 && output_size > 1) {
+		output[j++] = 'n';
+		output[j++] = 'a';
+		if (j < output_size) output[j++] = 'm';
+		if (j < output_size) output[j++] = 'e';
+	}
+
+	output[j] = '\0';
+}
+
+int creature_save_to_json(const Creature* creature) {
+	if (!creature) return -1;
+
+	char safe_name[MAX_NAME_LENGTH];
+	char filepath[MAX_NAME_LENGTH + 16];
+	sanitize_filename(creature->name, safe_name, sizeof(safe_name));
+	sprintf_s(filepath, sizeof(filepath), "%s.json", safe_name);
+
+	FILE* file = fopen(filepath, "w");
+	if (!file) return -1;
+
+	fprintf(file, "{\n");
+	fprintf(file, "  \"name\": \"%s\",\n", creature->name);
+	fprintf(file, "  \"initiative\": %d,\n", creature->initiative);
+	fprintf(file, "  \"dexterity\": %.1f,\n", creature->dexterity);
+	fprintf(file, "  \"effects\": [\n");
+
+	for (int i = 0; i < creature->effect_count; i++) {
+		fprintf(file, "    {\n");
+		fprintf(file, "      \"name\": \"%s\",\n", creature->effects[i].name);
+		fprintf(file, "      \"duration\": %d\n", creature->effects[i].duration);
+		fprintf(file, "    }%s\n", (i < creature->effect_count - 1) ? "," : "");
+	}
+
+	fprintf(file, "  ]\n");
+	fprintf(file, "}\n");
+	fclose(file);
+	return 0;
+}
+
+int encounter_save_to_json(Encounter* encounter, const char* filepath) {
+	if (!encounter || !filepath) return -1;
+
+	FILE* file = fopen(filepath, "w");
+	if (!file) return -1;
+
+	fprintf(file, "{\n");
+	fprintf(file, "  \"round_number\": %d,\n", encounter->round_number);
+	fprintf(file, "  \"current_turn_index\": %d,\n", encounter->current_turn_index);
+	fprintf(file, "  \"notes\": \"%s\",\n", encounter->notes);
+	fprintf(file, "  \"creatures\": [\n");
+
+	for (int i = 0; i < encounter->creature_count; i++) {
+		Creature* c = &encounter->creatures[i];
+		creature_save_to_json(c);
+		fprintf(file, "    {\n");
+		fprintf(file, "      \"name\": \"%s\",\n", c->name);
+		fprintf(file, "      \"initiative\": %d,\n", c->initiative);
+		fprintf(file, "      \"dexterity\": %.1f,\n", c->dexterity);
+		fprintf(file, "      \"effects\": [\n");
+
+		for (int j = 0; j < c->effect_count; j++) {
+			fprintf(file, "        {\n");
+			fprintf(file, "          \"name\": \"%s\",\n", c->effects[j].name);
+			fprintf(file, "          \"duration\": %d\n", c->effects[j].duration);
+			fprintf(file, "        }%s\n", (j < c->effect_count - 1) ? "," : "");
+		}
+
+		fprintf(file, "      ]\n");
+		fprintf(file, "    }%s\n", (i < encounter->creature_count - 1) ? "," : "");
+	}
+
+	fprintf(file, "  ]\n");
+	fprintf(file, "}\n");
+
+	fclose(file);
+	return 0;
+}
+
+int encounter_load_from_json(Encounter* encounter, const char* filepath) {
+	if (!encounter || !filepath) return -1;
+
+	FILE* file = fopen(filepath, "r");
+	if (!file) return -1;
+
+	char buffer[65536];
+	size_t read = fread(buffer, 1, sizeof(buffer) - 1, file);
+	fclose(file);
+
+	if (read == 0) return -1;
+	buffer[read] = '\0';
+
+	encounter->creature_count = 0;
+
+	const char* round_str = strstr(buffer, "\"round_number\"");
+	if (round_str) {
+		encounter->round_number = atoi(strchr(round_str, ':') + 1);
+	}
+
+	const char* turn_str = strstr(buffer, "\"current_turn_index\"");
+	if (turn_str) {
+		encounter->current_turn_index = atoi(strchr(turn_str, ':') + 1);
+	}
+
+	const char* notes_str = strstr(buffer, "\"notes\"");
+	if (notes_str) {
+		const char* start = strchr(notes_str, '"') + 1;
+		const char* end = strchr(start, '"');
+		if (end && (end - start) < (int)sizeof(encounter->notes)) {
+			strncpy(encounter->notes, start, end - start);
+			encounter->notes[end - start] = '\0';
+		}
+	}
+
+	const char* creatures_start = strstr(buffer, "\"creatures\"");
+	if (!creatures_start) return 0;
+
+	const char* ptr = strchr(creatures_start, '[') + 1;
+	int creature_idx = 0;
+
+	while ((ptr = strchr(ptr, '{')) != NULL && creature_idx < MAX_CREATURES) {
+		const char* next_close = strchr(ptr, '}');
+		if (!next_close) break;
+
+		const char* name_start = strstr(ptr, "\"name\"");
+		const char* init_start = strstr(ptr, "\"initiative\"");
+		const char* dex_start = strstr(ptr, "\"dexterity\"");
+
+		if (name_start && name_start < next_close) {
+			name_start = strchr(name_start, ':') + 1;
+			name_start = strchr(name_start, '"') + 1;
+			const char* name_end = strchr(name_start, '"');
+
+			int name_len = (int)(name_end - name_start);
+			if (name_len > MAX_NAME_LENGTH - 1) name_len = MAX_NAME_LENGTH - 1;
+
+			char name[MAX_NAME_LENGTH];
+			strncpy(name, name_start, name_len);
+			name[name_len] = '\0';
+
+			int initiative = 0;
+			if (init_start && init_start < next_close) {
+				initiative = atoi(strchr(init_start, ':') + 1);
+			}
+
+			float dexterity = 0.0f;
+			if (dex_start && dex_start < next_close) {
+				dexterity = (float)atof(strchr(dex_start, ':') + 1);
+			}
+
+			encounter_add_creature(encounter, name, initiative, dexterity);
+		}
+
+		ptr = next_close + 1;
+	}
+
+	return 0;
+}

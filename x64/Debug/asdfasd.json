@@ -1,0 +1,22 @@
+{
+  "name": "asdfasd",
+  "initiative": 10,
+  "effects": [
+    {
+      "name": "Deafened",
+      "duration": 2
+    },
+    {
+      "name": "Paralyzed",
+      "duration": 2
+    },
+    {
+      "name": "Resistance",
+      "duration": 1
+    },
+    {
+      "name": "Entangle",
+      "duration": 1
+    }
+  ]
+}

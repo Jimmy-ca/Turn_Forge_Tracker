@@ -1,0 +1,10 @@
+﻿#ifndef PERSISTENCE_H
+#define PERSISTENCE_H
+
+#include "models.h"
+
+int encounter_save_to_json(Encounter* encounter, const char* filepath);
+int encounter_load_from_json(Encounter* encounter, const char* filepath);
+int creature_save_to_json(const Creature* creature);
+
+#endif

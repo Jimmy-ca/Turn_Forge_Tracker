@@ -1,0 +1,10 @@
+{
+  "name": "2",
+  "initiative": 9,
+  "effects": [
+    {
+      "name": "Petrified",
+      "duration": 3
+    }
+  ]
+}

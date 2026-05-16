@@ -1,0 +1,14 @@
+{
+  "name": "4",
+  "initiative": 7,
+  "effects": [
+    {
+      "name": "Petrified",
+      "duration": 5
+    },
+    {
+      "name": "Prone",
+      "duration": 1
+    }
+  ]
+}

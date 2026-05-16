@@ -1,0 +1,11 @@
+{
+  "name": "New Creature1",
+  "initiative": 10,
+  "dexterity": 0.0,
+  "effects": [
+    {
+      "name": "Paralyzed",
+      "duration": 1
+    }
+  ]
+}

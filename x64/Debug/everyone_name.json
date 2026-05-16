@@ -1,0 +1,19 @@
+{
+  "name": "everyone name",
+  "initiative": 10,
+  "dexterity": 0.0,
+  "effects": [
+    {
+      "name": "Bless",
+      "duration": 1
+    },
+    {
+      "name": "Protection from Energy",
+      "duration": 1
+    },
+    {
+      "name": "Slow",
+      "duration": 1
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "name",
+  "initiative": 10,
+  "dexterity": 0.0,
+  "effects": [
+    {
+      "name": "Deafened",
+      "duration": 1
+    },
+    {
+      "name": "Paralyzed",
+      "duration": 1
+    }
+  ]
+}

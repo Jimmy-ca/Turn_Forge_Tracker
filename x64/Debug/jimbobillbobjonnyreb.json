@@ -1,0 +1,15 @@
+{
+  "name": "jimbobillbobjonnyreb",
+  "initiative": 10,
+  "dexterity": 18.1,
+  "effects": [
+    {
+      "name": "Resistance",
+      "duration": 2
+    },
+    {
+      "name": "Haste",
+      "duration": 3
+    }
+  ]
+}

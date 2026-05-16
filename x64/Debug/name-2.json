@@ -1,0 +1,18 @@
+{
+  "name": "name-2",
+  "initiative": 9,
+  "effects": [
+    {
+      "name": "Grappled",
+      "duration": 1
+    },
+    {
+      "name": "Incapacitated",
+      "duration": 1
+    },
+    {
+      "name": "Invisible",
+      "duration": 1
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "123422",
+  "initiative": 10,
+  "effects": [
+    {
+      "name": "Frightened",
+      "duration": 1
+    },
+    {
+      "name": "Invisible",
+      "duration": 1
+    },
+    {
+      "name": "Prone",
+      "duration": 1
+    },
+    {
+      "name": "Poisoned",
+      "duration": 1
+    },
+    {
+      "name": "Stunned",
+      "duration": 1
+    },
+    {
+      "name": "Deafened",
+      "duration": 2
+    },
+    {
+      "name": "Petrified",
+      "duration": 5
+    }
+  ]
+}
